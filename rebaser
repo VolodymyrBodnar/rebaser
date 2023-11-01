@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+
+import os
+import subprocess
+import argparse
+import time
+
+def run_command(command_list):
+    result = subprocess.run(command_list, capture_output=True, text=True)
+    return result.returncode == 0, result.stdout, result.stderr
+
+def main():
+    # Argument Parsing
+    parser = argparse.ArgumentParser(description='Auto-rebase Git branch.')
+    parser.add_argument('folder_path', type=str, help='Path to the local Git repository folder.')
+    parser.add_argument('feature_branch', type=str, help='Name of the feature branch to rebase.')
+    args = parser.parse_args()
+
+    while True:
+        # Navigate to Local Repository Folder
+        os.chdir(args.folder_path)
+
+        # Fetch Latest Changes
+        success, _, _ = run_command(["git", "fetch", "origin"])
+        if not success:
+            print("Failed to fetch latest changes.")
+            return
+
+        # Check if Main is Updated
+        local_commit = subprocess.getoutput("git rev-parse main")
+        remote_commit = subprocess.getoutput("git rev-parse origin/main")
+
+        # Perform Rebase if Main is Updated
+        if local_commit != remote_commit:
+            print("The main branch is updated. Performing rebase...")
+
+            # Checkout to feature branch
+            success, _, _ = run_command(["git", "checkout", args.feature_branch])
+            if not success:
+                print("Failed to checkout to the feature branch.")
+                return
+
+            # Perform Rebase
+            success, _, _ = run_command(["git", "rebase", "origin/main"])
+            if success:
+                print("Rebase successful. Pushing changes...")
+                # Force push with lease after successful rebase
+                push_success, _, push_error = run_command(["git", "push", "origin", args.feature_branch, "--force-with-lease"])
+                if push_success:
+                    print("Changes pushed successfully.")
+                else:
+                    print(f"Failed to push changes: {push_error}")
+            else:
+                print("Rebase failed. Please resolve conflicts manually.")
+        else:
+            print("The main branch is not updated. No rebase needed.")
+        
+        # Sleep for 15 minutes (900 seconds) before the next iteration
+        time.sleep(900)
+
+if __name__ == "__main__":
+    main()
